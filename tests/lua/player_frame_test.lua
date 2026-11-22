@@ -1186,46 +1186,77 @@ env.SoundQueue:RemoveAllSoundsFromQueue()
 env.Addon:SetPlayerStyle("classic")
 _G.IsShiftKeyDown = hadShift
 
----------------------------------------------------------------- native controller frame selection
-local registered, focused, selected
-local locked = false
+---------------------------------------------------------------- controller frame selection
+local overrides, nativeCallbacks = {}, {}
+local locked, nativeFrame = false, nil
 _G.InCombatLockdown = function() return locked end
 _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
 _G.GamepadMode = { FrameControlsManager = {
-    FrameShown = function(_, frame, popup, autofocus)
-        registered = frame
-        focused = not (popup and frame.skipGamepadAutoFocus) and autofocus
-        return true
-    end,
-    FrameHidden = function(_, frame)
-        if registered == frame then registered = nil end
-        return true
-    end,
+    GetActiveFrame = function() return nativeFrame end,
+    FrameShown = function() error("ADDON_ACTION_BLOCKED: narrator registered with Blizzard") end,
+    FrameHidden = function() error("ADDON_ACTION_BLOCKED: narrator removed from Blizzard") end,
 } }
-_G.SmartNavigation = { SetTargetButtonForFrame = function(_, _, button) selected = button end }
+_G.SmartNavigation = {
+    SetTargetButtonForFrame = function() error("ADDON_ACTION_BLOCKED: addon cursor target") end,
+}
+_G.EventRegistry = { RegisterCallback = function(_, event, cb) nativeCallbacks[event] = cb end }
+_G.GetBindingKey = function(binding) if binding == "TOGGLEUIFOCUS" then return "PADSELECT" end end
+_G.SetOverrideBindingClick = function(_, _, key, button) overrides[key] = button end
+_G.ClearOverrideBindings = function() overrides = {} end
+_G.RegisterStateDriver = function(frame, state, condition)
+    frame.testStateDriver = { state, condition }
+end
 env, quests = Boot()
 F = env.PlayerFrame
-F.frame.GetCenter = function() return 500, 300 end
+local function Press(key)
+    local target = overrides[key]
+    if target then _G[target]:Click() end
+end
+Expect("an idle narrator leaves Select Frames alone", overrides.PADSELECT, nil)
 quests:Enqueue(H.Clip({ length = 3 }))
 stub.Advance(.1)
-Expect("the playing narrator is available to Select Frames", registered, F.frame)
-Expect("new dialogue leaves the controller in movement mode", focused, false)
-F.frame:FocusGamepad()
-Expect("controller focus starts on the pause/replay button", selected, F.play)
-F.play.scripts.OnClick(F.play)
+Expect("a visible narrator can use the player's Select Frames binding", overrides.PADSELECT ~= nil, true)
+Expect("new dialogue leaves the other controller buttons alone", overrides.PAD1, nil)
+Press("PADSELECT")
+Expect("controller focus starts on the pause/replay button", F.play.spokenPadRing:IsShown(), true)
+Press("PAD1")
 Expect("controller can pause the line", env.SoundQueue:IsPaused(), true)
-F.play.scripts.OnClick(F.play)
+Press("PAD1")
 Expect("controller can replay the line", env.SoundQueue:IsPaused(), false)
-local stopAll = F.buttons[4]
-locked = true
-stopAll.scripts.OnClick(stopAll)
+
+nativeFrame = CreateFrame("Frame")
+nativeCallbacks["Gamepad.RefreshFrameFocus"]()
+stub.Advance(.1)
+Expect("a Blizzard window takes Select Frames back", overrides.PADSELECT, nil)
+Expect("a Blizzard window takes the other controller buttons back", overrides.PAD1, nil)
+nativeFrame = nil
+nativeCallbacks["Gamepad.RefreshFrameFocus"]()
+stub.Advance(.1)
+Press("PADSELECT")
+Press("PAD2")
+Expect("Circle exits narrator control mode", overrides.PAD1, nil)
+
+Press("PADSELECT")
+Press("PADDLEFT")
+Press("PAD1")
 stub.Advance(2)
 Expect("controller Stop All clears dialogue", env.SoundQueue:IsEmpty(), true)
-Expect("frame removal waits until combat ends", registered, F.frame)
+Expect("a drained queue gives Select Frames back to the game", overrides.PADSELECT, nil)
+
+quests:Enqueue(H.Clip({ length = 8 }))
+stub.Advance(.1)
+Press("PADSELECT")
+locked = true
+stub.FireEvent("PLAYER_REGEN_DISABLED")
+Press("PAD1")
+Expect("a stale press in combat cannot pause dialogue", env.SoundQueue:IsPaused(), false)
+-- The client executes the secure state driver's ClearBindings once it enters combat.
+overrides = {}
 locked = false
 stub.FireEvent("PLAYER_REGEN_ENABLED")
 stub.Advance(.1)
-Expect("the hidden narrator is removed from Select Frames", registered, nil)
+Expect("the visible narrator is selectable again after combat", overrides.PADSELECT ~= nil, true)
+Expect("combat releases the narrator's focused controls", overrides.PAD1, nil)
 
 if Failures() > 0 then print(string.format("\n%d failure(s)", Failures())); os.exit(1) end
 print("\nAll player frame tests passed")

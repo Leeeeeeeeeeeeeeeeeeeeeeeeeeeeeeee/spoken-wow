@@ -289,11 +289,154 @@ function Actions.StopButton(parent, allowed, after)
     return play
 end
 
---- Make a narrator window available to Forever's Select Frames binding while it is visible.
---- Register it as a passive popup so a line starting cannot take the controller from movement.
+local narratorPads, syncNarratorPad = {}, nil
+
+-- Registering an addon window with Forever's frame manager can taint the game's
+-- bindings when Select Frames enables Smart Navigation. Keep the narrator's focus
+-- and bindings on our own frames and yield whenever the game has a frame to select.
+local function NarratorPad(manager)
+    local owner = CreateFrame("Frame", nil, UIParent, "SecureHandlerStateTemplate")
+    owner:SetAttribute("_onstate-combat", [[if newstate == "locked" then self:ClearBindings() end]])
+    RegisterStateDriver(owner, "combat", "[combat] locked; open")
+
+    local focused, selected, selectBound, controlsBound, scheduled
+    local function Select(button)
+        if selected then selected.spokenPadRing:Hide() end
+        selected = button
+        if selected then selected.spokenPadRing:Show() end
+    end
+
+    local function Restricted()
+        return (InCombatLockdown and InCombatLockdown()) or SpokenLayout.CombatRestricted()
+    end
+
+    local function Available()
+        if Restricted() or not SpokenLayout.IsGamepadUI() or SoundQueue:IsEmpty() then return end
+        local native = manager:GetActiveFrame()
+        if manager.isUIFocused or (native and native:IsVisible())
+            or (GamepadRadial and GamepadRadial:IsShown()) then return end
+        for _, narrator in ipairs(narratorPads) do
+            if narrator.frame:IsVisible() then return narrator end
+        end
+    end
+
+    local function Move(direction)
+        local buttons = focused.buttons
+        local index = 0
+        for i, button in ipairs(buttons) do
+            if selected == button then index = i; break end
+        end
+        for _ = 1, #buttons do
+            index = (index + direction - 1) % #buttons + 1
+            local button = buttons[index]
+            if button:IsVisible() and button:IsEnabled() then
+                Select(button)
+                return
+            end
+        end
+        Select(nil)
+    end
+
+    local function Input(name, run)
+        local buttonName = "SpokenNarratorPad" .. name
+        local button = CreateFrame("Button", buttonName, owner)
+        button:SetScript("OnClick", run)
+        return buttonName
+    end
+
+    local Sync
+    local toggle = Input("Select", function()
+        local available = Available()
+        if not available then return end
+        if focused then
+            focused = nil
+        else
+            focused = available
+            Move(1)
+        end
+        Sync()
+    end)
+    local back = Input("Back", function() focused = nil; Sync() end)
+    local confirm = Input("Confirm", function()
+        if focused and Available() == focused and selected and selected:IsEnabled() then
+            selected:Click()
+            Sync()
+        end
+    end)
+    local function Step(direction)
+        if focused and Available() == focused then Move(direction) end
+    end
+    local bindings = {
+        { GAMEPAD_FACE_BOTTOM or "PAD1", confirm },
+        { GAMEPAD_FACE_RIGHT or "PAD2", back },
+        { GAMEPAD_DPAD_LEFT or "PADDLEFT", Input("Previous", function() Step(-1) end) },
+        { GAMEPAD_DPAD_RIGHT or "PADDRIGHT", Input("Next", function() Step(1) end) },
+    }
+
+    local function FocusKey()
+        for _, key in ipairs({ GetBindingKey("TOGGLEUIFOCUS") }) do
+            if key:find("PAD", 1, true) then return key end
+        end
+        return GAMEPAD_MENU_LEFT or "PADBACK"
+    end
+
+    function Sync()
+        scheduled = nil
+        local available = Available()
+        if focused ~= available then focused = nil end
+        if not focused then Select(nil)
+        elseif not selected or not selected:IsEnabled() or not selected:IsVisible() then Move(1) end
+        if Restricted() then return end
+
+        local key = available and FocusKey()
+        local controls = focused ~= nil
+        if selectBound == key and controlsBound == controls then return end
+        if selectBound then ClearOverrideBindings(owner) end
+        selectBound, controlsBound = key, controls
+        if key then SetOverrideBindingClick(owner, true, key, toggle) end
+        if controls then
+            for _, binding in ipairs(bindings) do
+                if binding[1] ~= key then SetOverrideBindingClick(owner, true, binding[1], binding[2]) end
+            end
+        end
+    end
+
+    local function Schedule()
+        if scheduled then return end
+        scheduled = true
+        C_Timer.After(0, Sync)
+    end
+
+    owner:RegisterEvent("PLAYER_REGEN_DISABLED")
+    owner:RegisterEvent("PLAYER_REGEN_ENABLED")
+    owner:RegisterEvent("UPDATE_BINDINGS")
+    owner:RegisterEvent("CVAR_UPDATE")
+    owner:SetScript("OnEvent", function(_, event, cvar)
+        if event == "PLAYER_REGEN_DISABLED" then
+            focused = nil
+            Select(nil)
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            -- The secure state driver already released every key on entering combat.
+            selectBound, controlsBound = nil, nil
+            Schedule()
+        elseif event == "UPDATE_BINDINGS" or (cvar and (cvar:lower() == "inputdeviceinterfacestyle"
+            or cvar:lower() == "gamepadenable")) then
+            Schedule()
+        end
+    end)
+    EventRegistry:RegisterCallback("Gamepad.RefreshFrameFocus", Schedule, owner)
+    if GamepadRadial then
+        GamepadRadial:HookScript("OnShow", Schedule)
+        GamepadRadial:HookScript("OnHide", Schedule)
+    end
+    Callbacks:Register("AUDIO_CHANGED", Schedule)
+    return Schedule
+end
+
 function Actions.AddGamepadControls(frame, controls, buttons)
     local manager = GamepadMode and GamepadMode.FrameControlsManager
-    if not (manager and SmartNavigation and manager.FrameShown and manager.FrameHidden) then return end
+    if not (manager and manager.GetActiveFrame and EventRegistry and EventRegistry.RegisterCallback
+        and SetOverrideBindingClick and ClearOverrideBindings and GetBindingKey and RegisterStateDriver) then return end
 
     local stopAll = Actions.RoundButton(controls, 11)
     stopAll.glyph:SetTexture([[Interface\Buttons\UI-Panel-MinimizeButton-Up]])
@@ -305,46 +448,19 @@ function Actions.AddGamepadControls(frame, controls, buttons)
         GameTooltip:Show()
     end)
     table.insert(buttons, stopAll)
-    frame.skipGamepadAutoFocus = true
-    frame.FocusGamepad = function()
-        frame.returnToPlayerControl = true
-        if SmartNavigation.SetTargetButtonForFrame and not SpokenLayout.CombatRestricted() then
-            SmartNavigation:SetTargetButtonForFrame(frame, buttons[1])
-        end
+    for _, button in ipairs(buttons) do
+        local ring = button:CreateTexture(nil, "OVERLAY")
+        ring:SetTexture([[Interface\Buttons\UI-ActionButton-Border]])
+        ring:SetBlendMode("ADD")
+        ring:SetPoint("TOPLEFT", button, "TOPLEFT", -10, 10)
+        ring:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 10, -10)
+        ring:Hide()
+        button.spokenPadRing = ring
     end
-
-    local registered, scheduled
-    local events = CreateFrame("Frame")
-    local function Sync()
-        scheduled = nil
-        if not SpokenLayout.IsGamepadUI() then return end
-        local visible = frame:IsVisible()
-        if visible == registered then return end
-        if SpokenLayout.CombatRestricted() or (InCombatLockdown and InCombatLockdown()) then
-            events:RegisterEvent("PLAYER_REGEN_ENABLED")
-        elseif visible and frame:GetCenter() then
-            registered = manager:FrameShown(frame, true, false) == true
-        elseif not visible and registered then
-            manager:FrameHidden(frame)
-            registered = false
-        end
-    end
-    local function Schedule()
-        if scheduled then return end
-        scheduled = true
-        C_Timer.After(0, Sync)
-    end
-    frame:HookScript("OnShow", Schedule)
-    frame:HookScript("OnHide", Schedule)
-    events:RegisterEvent("CVAR_UPDATE")
-    events:SetScript("OnEvent", function(self, event, cvar)
-        if event == "PLAYER_REGEN_ENABLED" then
-            self:UnregisterEvent(event)
-            Schedule()
-        elseif cvar and (cvar:lower() == "inputdeviceinterfacestyle" or cvar:lower() == "gamepadenable") then
-            Schedule()
-        end
-    end)
+    table.insert(narratorPads, { frame = frame, buttons = buttons })
+    syncNarratorPad = syncNarratorPad or NarratorPad(manager)
+    frame:HookScript("OnShow", syncNarratorPad)
+    frame:HookScript("OnHide", syncNarratorPad)
 end
 
 --- A row of round buttons laid out left to right in `controls`, `gap` apart, which takes their size.

@@ -377,6 +377,7 @@ function Skin:Initialize()
         function() self:UpdateControls() end)
     self.play, self.previous, self.skip = play, Actions.PreviousButton(self.controls), Actions.SkipButton(self.controls)
     self.buttons = { self.play, self.previous, self.skip }
+    Actions.AddGamepadControls(frame, self.controls, self.buttons)
     Actions:Build(frame)
 
     -- No scrollbar: the captions scroll themselves on the wheel.

@@ -1186,5 +1186,46 @@ env.SoundQueue:RemoveAllSoundsFromQueue()
 env.Addon:SetPlayerStyle("classic")
 _G.IsShiftKeyDown = hadShift
 
+---------------------------------------------------------------- native controller frame selection
+local registered, focused, selected
+local locked = false
+_G.InCombatLockdown = function() return locked end
+_G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+_G.GamepadMode = { FrameControlsManager = {
+    FrameShown = function(_, frame, popup, autofocus)
+        registered = frame
+        focused = not (popup and frame.skipGamepadAutoFocus) and autofocus
+        return true
+    end,
+    FrameHidden = function(_, frame)
+        if registered == frame then registered = nil end
+        return true
+    end,
+} }
+_G.SmartNavigation = { SetTargetButtonForFrame = function(_, _, button) selected = button end }
+env, quests = Boot()
+F = env.PlayerFrame
+F.frame.GetCenter = function() return 500, 300 end
+quests:Enqueue(H.Clip({ length = 3 }))
+stub.Advance(.1)
+Expect("the playing narrator is available to Select Frames", registered, F.frame)
+Expect("new dialogue leaves the controller in movement mode", focused, false)
+F.frame:FocusGamepad()
+Expect("controller focus starts on the pause/replay button", selected, F.play)
+F.play.scripts.OnClick(F.play)
+Expect("controller can pause the line", env.SoundQueue:IsPaused(), true)
+F.play.scripts.OnClick(F.play)
+Expect("controller can replay the line", env.SoundQueue:IsPaused(), false)
+local stopAll = F.buttons[4]
+locked = true
+stopAll.scripts.OnClick(stopAll)
+stub.Advance(2)
+Expect("controller Stop All clears dialogue", env.SoundQueue:IsEmpty(), true)
+Expect("frame removal waits until combat ends", registered, F.frame)
+locked = false
+stub.FireEvent("PLAYER_REGEN_ENABLED")
+stub.Advance(.1)
+Expect("the hidden narrator is removed from Select Frames", registered, nil)
+
 if Failures() > 0 then print(string.format("\n%d failure(s)", Failures())); os.exit(1) end
 print("\nAll player frame tests passed")

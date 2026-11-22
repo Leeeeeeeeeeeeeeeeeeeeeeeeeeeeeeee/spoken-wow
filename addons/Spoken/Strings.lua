@@ -238,6 +238,10 @@ L = {
     OPT_MUTE_DIALOGUE = "Silence NPC Voices",
     OPT_READ_IN_BATTLEGROUNDS = "Read in Battlegrounds",
     OPT_LINE_GAP = "Pause Between Lines",
+    OPT_PRIORITIZE_CURRENT_DIALOGUE = "Prioritize Current Dialogue",
+    OPT_PRIORITIZE_CURRENT_DIALOGUE_TIP = "Read a new place or NPC first, then return to queued lines. Interrupted lines restart from the beginning.",
+    OPT_VOICE_SPEED = "Voice Playback Speed",
+    OPT_VOICE_SPEED_TIP = "Applies to the next line. Recordings without a faster copy play at 1×.",
     -- Over the "+N" count: the lines waiting.
     WAITING_TITLE = "Up Next",
     DIALOGUE_REPORT_PROBLEM = "Report a Problem",

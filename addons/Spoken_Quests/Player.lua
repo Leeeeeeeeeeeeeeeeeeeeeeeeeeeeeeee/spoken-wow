@@ -367,6 +367,9 @@ function Player:EnqueuePrepared(soundData, asked)
     if self.playNow then
         return self:PlayPreparedNow(soundData)
     end
+    local npc = not asked and soundData.event ~= Enums.SoundEvent.NPCChatter
+        and (soundData.unitGUID or soundData.name)
+    soundData.playbackContext = npc and npc ~= "" and ("npc:" .. npc) or nil
     local added, reason = self:SourceOf(soundData):Enqueue(soundData, asked)
     if not added then
         if reason == "duplicate" then

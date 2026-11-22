@@ -180,6 +180,7 @@ function PlayerFrame:InitHeader()
     self.previous = Actions.PreviousButton(self.controls)
     self.skip = Actions.SkipButton(self.controls)
     self.buttons = { self.play, self.previous, self.skip }
+    Actions.AddGamepadControls(self.frame, self.controls, self.buttons)
 
     self.progress = Actions.ProgressBar(container)
     self.progress.track:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, 0)

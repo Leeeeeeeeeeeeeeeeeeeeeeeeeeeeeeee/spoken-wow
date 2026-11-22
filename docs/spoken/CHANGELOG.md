@@ -4,6 +4,9 @@ Spoken Player until 3.0.0, when it became Spoken and took its modules into one d
 
 ## Unreleased
 
+- **Prioritize Current Dialogue** reads a new NPC or place first, then returns to the backlog. Turn it on under Playback. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
+- **Voice Playback Speed** sets prepared recordings to 1×–1.5× under Playback. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
+- **Select Frames** now reaches the active narrator window for Stop or Replay, Skip and Stop All on a controller. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
 - **Queue counts pulse without an error when a line is added while Spoken is stopped.** *([anon1231823](https://github.com/anon1231823))*
 
 ## 3.12.0 — 2026-11-22

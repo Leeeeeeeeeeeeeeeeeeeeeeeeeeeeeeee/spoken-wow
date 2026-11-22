@@ -131,6 +131,20 @@ end
 ---@return boolean willPlay
 ---@return number|nil handle
 function SoundUtils:PlaySound(clip, channel)
+    local speed = tonumber(Addon.db.profile.Audio.VoiceSpeed) or 1
+    local percent = math.floor(speed * 10 + 0.5) * 10
+    local relative = percent >= 110 and percent <= 150 and type(clip.path) == "string"
+        and clip.path:match([[^Interface\AddOns\(Spoken[^\]+Audio[^\]*\.+)$]])
+    if relative then
+        local path = format([[Interface\AddOns\Spoken\VoiceSpeed\%d\%s.mp3]], percent, relative)
+        local willPlay, handle = PlaySoundFile(path, channel)
+        if willPlay then
+            clip.handle = handle
+            clip.playbackSpeed = percent / 100
+            return willPlay, handle
+        end
+    end
+    clip.playbackSpeed = 1
     local willPlay, handle = PlaySoundFile(clip.path, channel)
     clip.handle = handle
     return willPlay, handle

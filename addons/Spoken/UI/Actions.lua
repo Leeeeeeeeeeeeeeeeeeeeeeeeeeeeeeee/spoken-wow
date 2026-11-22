@@ -289,6 +289,64 @@ function Actions.StopButton(parent, allowed, after)
     return play
 end
 
+--- Make a narrator window available to Forever's Select Frames binding while it is visible.
+--- Register it as a passive popup so a line starting cannot take the controller from movement.
+function Actions.AddGamepadControls(frame, controls, buttons)
+    local manager = GamepadMode and GamepadMode.FrameControlsManager
+    if not (manager and SmartNavigation and manager.FrameShown and manager.FrameHidden) then return end
+
+    local stopAll = Actions.RoundButton(controls, 11)
+    stopAll.glyph:SetTexture([[Interface\Buttons\UI-Panel-MinimizeButton-Up]])
+    stopAll.glyph:SetTexCoord(.2, .8, .2, .8)
+    stopAll:SetScript("OnClick", function() SoundQueue:RemoveAllSoundsFromQueue() end)
+    stopAll:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(stopAll, "ANCHOR_TOP")
+        GameTooltip:SetText(L.BIND_STOP)
+        GameTooltip:Show()
+    end)
+    table.insert(buttons, stopAll)
+    frame.skipGamepadAutoFocus = true
+    frame.FocusGamepad = function()
+        frame.returnToPlayerControl = true
+        if SmartNavigation.SetTargetButtonForFrame and not SpokenLayout.CombatRestricted() then
+            SmartNavigation:SetTargetButtonForFrame(frame, buttons[1])
+        end
+    end
+
+    local registered, scheduled
+    local events = CreateFrame("Frame")
+    local function Sync()
+        scheduled = nil
+        if not SpokenLayout.IsGamepadUI() then return end
+        local visible = frame:IsVisible()
+        if visible == registered then return end
+        if SpokenLayout.CombatRestricted() or (InCombatLockdown and InCombatLockdown()) then
+            events:RegisterEvent("PLAYER_REGEN_ENABLED")
+        elseif visible and frame:GetCenter() then
+            registered = manager:FrameShown(frame, true, false) == true
+        elseif not visible and registered then
+            manager:FrameHidden(frame)
+            registered = false
+        end
+    end
+    local function Schedule()
+        if scheduled then return end
+        scheduled = true
+        C_Timer.After(0, Sync)
+    end
+    frame:HookScript("OnShow", Schedule)
+    frame:HookScript("OnHide", Schedule)
+    events:RegisterEvent("CVAR_UPDATE")
+    events:SetScript("OnEvent", function(self, event, cvar)
+        if event == "PLAYER_REGEN_ENABLED" then
+            self:UnregisterEvent(event)
+            Schedule()
+        elseif cvar and (cvar:lower() == "inputdeviceinterfacestyle" or cvar:lower() == "gamepadenable") then
+            Schedule()
+        end
+    end)
+end
+
 --- A row of round buttons laid out left to right in `controls`, `gap` apart, which takes their size.
 function Actions.LayOutRow(controls, row, gap)
     local x, tallest = 0, 1

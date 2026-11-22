@@ -125,6 +125,7 @@ function MinimalPlayer:Initialize(original)
     self.previous = Actions.PreviousButton(self.controls)
     self.skip = Actions.SkipButton(self.controls)
     self.buttons = { self.play, self.previous, self.skip }
+    Actions.AddGamepadControls(frame, self.controls, self.buttons)
 
     self.name = Font(self.header, 16, 1, .82, 0)
     self.name:SetHeight(NAME_HEIGHT)

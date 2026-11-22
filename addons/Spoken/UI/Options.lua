@@ -872,6 +872,12 @@ local function Build()
 
     -- How lines follow one another.
     layout:Section(L.OPT_PLAYBACK_TITLE)
+    layout:Checkbox(L.OPT_PRIORITIZE_CURRENT_DIALOGUE, L.OPT_PRIORITIZE_CURRENT_DIALOGUE_TIP,
+        function() return audio().PrioritizeCurrentDialogue end,
+        function(v) audio().PrioritizeCurrentDialogue = v end)
+    layout:Slider(L.OPT_VOICE_SPEED, 1, 1.5, 0.1,
+        function() return audio().VoiceSpeed or 1 end, function(v) audio().VoiceSpeed = v end,
+        nil, function(v) return format("%.1f×", v) end, L.OPT_VOICE_SPEED_TIP)
     layout:Slider(L.OPT_LINE_GAP, 0, 5, 0.25,
         function() return audio().LineGap or 0 end, function(v) audio().LineGap = v end,
         nil, Layout.Seconds)

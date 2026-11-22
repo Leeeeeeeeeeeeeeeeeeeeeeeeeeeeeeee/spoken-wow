@@ -5,9 +5,8 @@ setfenv(1, SpokenEnv)
 --
 -- The policy, in one place:
 --
---  * ONE FIFO, IN ADMISSION ORDER, ACROSS EVERY SOURCE. A new clip is appended. Nothing
---    interrupts, displaces or reorders a clip that is already speaking, except a gate
---    closing on it (below). There is no cross-source priority.
+--  * ONE FIFO, IN ADMISSION ORDER, ACROSS EVERY SOURCE, unless Prioritize Current Dialogue
+--    is on. A new NPC or place can then go first, returning the interrupted clip to the queue.
 --  * A LOW-PRIORITY CLIP YIELDS AT THE DOOR, both ways: refused if a normal clip is
 --    queued or speaking, and a waiting low clip is dropped when a normal one arrives.
 --    Never the one speaking -- that would be an interruption. So gossip never plays while a
@@ -31,6 +30,7 @@ setfenv(1, SpokenEnv)
 ---@field path string         Full path handed to PlaySoundFile.
 ---@field length number       Seconds. The client cannot report this; the caller must know.
 ---@field priority? string    "normal" (default) or "low".
+---@field playbackContext? string  NPC or place associated with automatic dialogue.
 ---@field group? string       Clips of one item, e.g. a book's pages. No pause or cue between them.
 ---@field continues? boolean  Its next part is put in as it ends (source:Continue). No pause or cue after it.
 ---@field span? table         { before, total }: seconds of its item before it, and in all (SoundQueue:Share).
@@ -45,6 +45,7 @@ setfenv(1, SpokenEnv)
 ---@field nextSoundTimer any  Set ONLY while actually speaking. The liveness test.
 ---@field rewound? boolean   Queued again by Previous, so outside its source's queueLimit.
 ---@field silent? true|"cut"  No voice: true from the start (words alone, or muted); "cut" when mute stopped it. Unmute replays only a cut line.
+---@field playbackSpeed? number  Actual speed of this play, including fallback to the original.
 
 SoundQueue = {
     soundIdCounter = 0,
@@ -158,8 +159,12 @@ local function CountFor(source)
     return n
 end
 
+local function PriorityContext(clip)
+    return Addon.db.profile.Audio.PrioritizeCurrentDialogue and clip.playbackContext
+end
+
 local function IsLow(clip)
-    return clip.priority == "low"
+    return clip.priority == "low" and not PriorityContext(clip)
 end
 
 --------------------------------------------------------------------------------
@@ -215,8 +220,7 @@ local function CancelSpeakTimer(clip)
 end
 
 -- Silence the head but keep its place: it replays from the start when Advance next
--- reaches it, since the client has no seek. Shared by the two things allowed to cut a
--- clip off without ending it -- a human pressing Play, and a gate closing on it.
+-- reaches it, since the client has no seek.
 -- With `quiet`, its stopCallback does not run: the line stays queued, and a source reads that
 -- callback as the line being dropped (a book drops the pages after it).
 local function StopKeeping(head, quiet)
@@ -546,6 +550,7 @@ function SoundQueue:PlaySound(clip)
     -- A text-only line has nothing to play and leaves the game's dialogue alone.
     local muted = self:IsMuted()
     clip.silent = (clip.textOnly or muted) and true or nil
+    clip.playbackSpeed = 1
     local willPlay = clip.silent or SoundUtils:PlaySound(clip, channel)
     if not willPlay then
         Discard(clip, "missing")
@@ -568,10 +573,11 @@ function SoundQueue:PlaySound(clip)
 
     -- The client fires no event when a sound finishes, so the recorded duration is the
     -- only signal that the clip is over.
-    clip.spokenAt = GetTime() + clip.length
+    local duration = clip.length / clip.playbackSpeed
+    clip.spokenAt = GetTime() + duration
     clip.nextSoundTimer = Addon:ScheduleTimer(function()
         AfterSpoken(clip)
-    end, clip.length)
+    end, duration)
     WatchForCut(clip)
 end
 
@@ -587,10 +593,11 @@ function SoundQueue:Share(clip, elapsed)
     return math.max(0, math.min(1, share))
 end
 
---- Seconds of `clip`'s voice heard so far: 0 before it starts, its length once it has ended.
+--- Time in the original recording, so caption timing and item progress use the same units.
 function SoundQueue:VoiceElapsed(clip)
     local length = tonumber(clip.length) or 0
-    return math.max(0, math.min(length, length - (clip.spokenAt - GetTime())))
+    local speed = clip.playbackSpeed or 1
+    return math.max(0, math.min(length, length - (clip.spokenAt - GetTime()) * speed))
 end
 
 --- Start something if nothing is speaking and something may. Safe to call at any time;
@@ -658,7 +665,7 @@ local function TrimBacklog(source, admitted)
             local isHead = index == 1 and SoundQueue:IsPlaying()
             -- The limit is for lines still arriving: ones Previous took the player back over
             -- are already heard, and trimming them would drop the newest line.
-            if clip.source == source and not isHead and not clip.rewound then
+            if clip.source == source and not isHead and not clip.rewound and not PriorityContext(clip) then
                 waiting = waiting + 1
                 if clip ~= admitted and (not oldest or clip.id < oldest.id) then
                     oldest = clip
@@ -761,7 +768,20 @@ function SoundQueue:Add(clip, source, front)
     clip.source = source
     -- A source of words alone makes every line of it one.
     clip.textOnly = clip.textOnly or source.textOnly
-    if front then
+    local head = self:GetCurrentSound()
+    local context = not front and PriorityContext(clip)
+    if context and head and context ~= head.playbackContext then
+        -- Admit before asking gates, since some are deliberately scoped to clip.source.
+        -- Keeping the stopped clip preserves its position and any continuation it owns.
+        local interrupt = self:IsPlaying(head) and head.spokenAt > GetTime()
+            and self:CanBePaused() and not self:GetHeldReason(clip)
+        if interrupt then
+            StopKeeping(head, true)
+            table.insert(self.sounds, 1, clip)
+        else
+            table.insert(self.sounds, (self:IsPlaying() or self:IsPaused()) and 2 or 1, clip)
+        end
+    elseif front then
         table.insert(self.sounds, front == true and 1 or math.min(front, #self.sounds + 1), clip)
     else
         table.insert(self.sounds, clip)

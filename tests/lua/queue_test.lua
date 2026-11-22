@@ -39,6 +39,60 @@ Expect("FIFO across sources: 1st", world.played[1], c1.path)
 Expect("FIFO across sources: 2nd", world.played[2], c2.path)
 Expect("FIFO across sources: 3rd", world.played[3], c3.path)
 
+---------------------------------------------------------------- current dialogue priority
+Fresh()
+env.Addon.db.profile.Audio.PrioritizeCurrentDialogue = true
+local oldNPC = H.Clip({ playbackContext = "npc:old" })
+local backlog = H.Clip()
+local currentNPC = H.Clip({ priority = "low", playbackContext = "npc:new" })
+local sameNPC = H.Clip({ playbackContext = "npc:new" })
+quests:Enqueue(oldNPC)
+quests:Enqueue(backlog)
+quests:Enqueue(currentNPC)
+quests:Enqueue(sameNPC)
+Expect("new NPC's greeting plays ahead of a quest backlog", world.played[2], currentNPC.path)
+Expect("the interrupted clip stays queued first", Q:GetQueue()[2], oldNPC)
+Expect("the previous backlog keeps its order", Q:GetQueue()[3], backlog)
+Expect("the same NPC's next line joins the backlog", Q:GetQueue()[4], sameNPC)
+stub.Advance(1.55)
+Expect("the interrupted clip restarts after the new NPC", world.played[3], oldNPC.path)
+
+local currentPlace = H.Clip({ playbackContext = "z:123" })
+local holdPlace = true
+places:AddGate(function() return holdPlace and "in combat" end)
+places:Enqueue(currentPlace)
+Expect("a held place cannot interrupt the line that is speaking", Q:GetCurrentSound(), oldNPC)
+Expect("a held place still leads the waiting lines", Q:GetQueue()[2], currentPlace)
+holdPlace = false
+stub.Advance(1.55)
+Expect("the held place plays first once it is ready", Q:GetCurrentSound(), currentPlace)
+Q:PauseQueue()
+local thirdNPC = H.Clip({ playbackContext = "npc:third" })
+quests:Enqueue(thirdNPC)
+Expect("a new context leaves the player's pause in effect", Q:IsPaused(), true)
+Expect("a new context leaves the paused clip at the head", Q:GetCurrentSound(), currentPlace)
+
+---------------------------------------------------------------- voice speed and fallback
+Fresh()
+env.Addon.db.profile.Audio.VoiceSpeed = 1.5
+local sourcePath = [[Interface\AddOns\SpokenQuestsAudioShared\generated\sounds\quests\clip.ogg]]
+local fastPath = [[Interface\AddOns\Spoken\VoiceSpeed\150\SpokenQuestsAudioShared\generated\sounds\quests\clip.ogg.mp3]]
+local fast = H.Clip({ path = sourcePath, length = 3 })
+quests:Enqueue(fast)
+Expect("speed selects the locally rendered audio file", world.played[1], fastPath)
+stub.Advance(1)
+Expect("captions advance in original recording seconds", Q:VoiceElapsed(fast), 1.5)
+stub.Advance(1)
+Expect("the three-second line finishes in two seconds", Q:IsEmpty(), true)
+
+world.missing[fastPath] = true
+local fallback = H.Clip({ path = sourcePath, length = 3 })
+quests:Enqueue(fallback)
+Expect("unavailable speed variants use the original file", world.played[#world.played], sourcePath)
+Expect("fallback has original timing", fallback.playbackSpeed, 1)
+stub.Advance(2)
+Expect("the fallback line still plays after two seconds", Q:IsPlaying(fallback), true)
+
 ---------------------------------------------------------------- dedup on key
 Fresh()
 local d = H.Clip({ key = "same" })

@@ -4,8 +4,9 @@ Spoken Player until 3.0.0, when it became Spoken and took its modules into one d
 
 ## Unreleased
 
-- **Prioritize Current Dialogue** reads a new NPC or place first, then returns to the backlog. Turn it on under Playback. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
+- **Prioritize Current Dialogue** has separate switches for NPC dialogue and area narration. By default, NPCs can interrupt and areas queue. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
 - **Voice Playback Speed** sets prepared recordings to 1×–1.5× under Playback. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
+- **Captions follow accelerated voices**, and the next queued line plays when the client ends a recording early. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
 - **Select Frames** reaches the narrator without a blocked-action popup. Use Left or Right to choose a control, then press A or Cross. *([Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee](https://github.com/Leeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee))*
 - **Queue counts pulse without an error when a line is added while Spoken is stopped.** *([anon1231823](https://github.com/anon1231823))*
 

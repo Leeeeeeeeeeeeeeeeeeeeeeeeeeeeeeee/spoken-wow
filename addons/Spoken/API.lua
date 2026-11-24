@@ -106,7 +106,7 @@ end
 --     length   = 3.4,                         -- seconds; the client cannot report this
 --     textOnly = true,                        -- optional, as every line of a textOnly source; no path: shown in the narrator for `length`
 --     priority = "normal" | "low",            -- low yields at the door; gossip is low
---     playbackContext = "npc:…",             -- optional automatic NPC or place priority key
+--     playbackContext = "npc:…",             -- optional priority key; "npc:" or "place:" plus an ID
 --     group    = "book:123",                  -- optional; clips of one item, no pause or cue between
 --     continues = true,                       -- optional; its next part follows (source:Continue), no pause or cue
 --     span     = { before = 12, total = 40 }, -- optional; seconds of its item before it and in all, for the progress bar

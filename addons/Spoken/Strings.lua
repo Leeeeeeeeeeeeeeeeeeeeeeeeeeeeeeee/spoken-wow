@@ -239,7 +239,11 @@ L = {
     OPT_READ_IN_BATTLEGROUNDS = "Read in Battlegrounds",
     OPT_LINE_GAP = "Pause Between Lines",
     OPT_PRIORITIZE_CURRENT_DIALOGUE = "Prioritize Current Dialogue",
-    OPT_PRIORITIZE_CURRENT_DIALOGUE_TIP = "Read a new place or NPC first, then return to queued lines. Interrupted lines restart from the beginning.",
+    OPT_PRIORITIZE_CURRENT_DIALOGUE_TIP = "Choose which new lines speak first, then return to the queue. Interrupted lines restart from the beginning.",
+    OPT_INTERRUPT_NPC = "NPC Dialogue Can Interrupt",
+    OPT_INTERRUPT_NPC_TIP = "A new NPC can speak before the current line finishes. Turn this off to queue the new dialogue.",
+    OPT_INTERRUPT_PLACES = "Area Narration Can Interrupt",
+    OPT_INTERRUPT_PLACES_TIP = "Entering a new area can interrupt the current line. Turn this off to play area narration in order.",
     OPT_VOICE_SPEED = "Voice Playback Speed",
     OPT_VOICE_SPEED_TIP = "Applies to the next line. Recordings without a faster copy play at 1×.",
     -- Over the "+N" count: the lines waiting.

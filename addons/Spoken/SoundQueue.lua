@@ -30,7 +30,7 @@ setfenv(1, SpokenEnv)
 ---@field path string         Full path handed to PlaySoundFile.
 ---@field length number       Seconds. The client cannot report this; the caller must know.
 ---@field priority? string    "normal" (default) or "low".
----@field playbackContext? string  NPC or place associated with automatic dialogue.
+---@field playbackContext? string  Automatic dialogue context, prefixed with "npc:" or "place:".
 ---@field group? string       Clips of one item, e.g. a book's pages. No pause or cue between them.
 ---@field continues? boolean  Its next part is put in as it ends (source:Continue). No pause or cue after it.
 ---@field span? table         { before, total }: seconds of its item before it, and in all (SoundQueue:Share).
@@ -163,6 +163,12 @@ local function PriorityContext(clip)
     return Addon.db.profile.Audio.PrioritizeCurrentDialogue and clip.playbackContext
 end
 
+local function CanInterrupt(context, audio)
+    local kind = context:match("^([^:]+):")
+    return (kind == "npc" and audio.InterruptForNPCs ~= false)
+        or (kind == "place" and audio.InterruptForPlaces == true)
+end
+
 local function IsLow(clip)
     return clip.priority == "low" and not PriorityContext(clip)
 end
@@ -212,7 +218,15 @@ local function StartRetryTicker()
     end, RETRY_INTERVAL)
 end
 
+local function StopWatching(clip)
+    if clip.cutWatch then
+        Addon:CancelTimer(clip.cutWatch)
+        clip.cutWatch = nil
+    end
+end
+
 local function CancelSpeakTimer(clip)
+    StopWatching(clip)
     if clip.nextSoundTimer then
         Addon:CancelTimer(clip.nextSoundTimer)
         clip.nextSoundTimer = nil
@@ -512,17 +526,10 @@ local function AfterSpoken(clip)
     end
 end
 
--- The client can stop our voice unannounced (alt-tab without Sound in Background, a cinematic),
--- leaving the timer and bar to run on in silence, so a voice gone early is stopped as Stop does.
--- The margin keeps a voice slightly shorter than its recorded length from reading as a cut.
+-- A handle that disappears before the recorded duration can be a short recording or a
+-- client-side cutoff. End this line without setting the player's Stop state. The next
+-- line still waits for any applicable gates.
 local CUT_POLL, CUT_MARGIN = 0.5, 0.5
-
-local function StopWatching(clip)
-    if clip.cutWatch then
-        Addon:CancelTimer(clip.cutWatch)
-        clip.cutWatch = nil
-    end
-end
 
 local function WatchForCut(clip)
     StopWatching(clip)
@@ -537,9 +544,11 @@ local function WatchForCut(clip)
         end
         local ok, playing = pcall(C_Sound.IsPlaying, handle)
         if ok and playing == false then
-            StopWatching(clip)
-            Developer:Log("player", "voice cut by the client, line stopped")
-            SoundQueue:PauseQueue()
+            CancelSpeakTimer(clip)
+            clip.handle = nil
+            clip.spokenAt = GetTime()
+            Developer:Log("player", "sound handle ended early, continuing playback")
+            AfterSpoken(clip)
         end
     end, CUT_POLL)
 end
@@ -770,7 +779,7 @@ function SoundQueue:Add(clip, source, front)
     clip.textOnly = clip.textOnly or source.textOnly
     local head = self:GetCurrentSound()
     local context = not front and PriorityContext(clip)
-    if context and head and context ~= head.playbackContext then
+    if context and head and context ~= head.playbackContext and CanInterrupt(context, Addon.db.profile.Audio) then
         -- Admit before asking gates, since some are deliberately scoped to clip.source.
         -- Keeping the stopped clip preserves its position and any continuation it owns.
         local interrupt = self:IsPlaying(head) and head.spokenAt > GetTime()

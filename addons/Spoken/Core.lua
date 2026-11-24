@@ -54,6 +54,8 @@ Defaults = {
             -- A string, because that is what PlaySoundFile takes.
             SoundChannel = "Master",
             PrioritizeCurrentDialogue = false,
+            InterruptForNPCs = true,
+            InterruptForPlaces = false,
             VoiceSpeed = 1,
             -- Seconds of quiet between one line and the next, on top of each module's own short
             -- gap: back to back, a new line started before the last had settled.

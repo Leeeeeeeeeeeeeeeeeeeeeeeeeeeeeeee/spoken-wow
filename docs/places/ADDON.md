@@ -141,9 +141,9 @@ the zone's icon as the face (Spoken's book without one), the place's picture and
 - Play on a page and `/spp play` use `PlayNow`: the story starts at once, ahead of the queue.
 - A shift-click on a row in the Compendium queues the story behind what is playing (`QueueLore`),
   and does nothing for a place not yet found.
-- Reading on discovery appends to the queue. With Spoken's Prioritize Current Dialogue on,
-  a new place speaks first and the previous lines stay queued. A place without a recording
-  leaves the queue as it was.
+- Reading on discovery appends to the queue. With both Prioritize Current Dialogue and Area
+  Narration Can Interrupt on, a new place speaks first and the previous lines stay queued.
+  A place without a recording leaves the queue as it was.
 - Before a clip starts, Places' gate (`Autoplay.lua`, `HoldReason`) holds what reading on discovery
   queued while reading is off, in combat or during a cinematic. A held line waits and shows why.
   Play and shift-click lines are never held.

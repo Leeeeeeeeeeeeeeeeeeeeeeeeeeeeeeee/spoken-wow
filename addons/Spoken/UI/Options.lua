@@ -875,6 +875,15 @@ local function Build()
     layout:Checkbox(L.OPT_PRIORITIZE_CURRENT_DIALOGUE, L.OPT_PRIORITIZE_CURRENT_DIALOGUE_TIP,
         function() return audio().PrioritizeCurrentDialogue end,
         function(v) audio().PrioritizeCurrentDialogue = v end)
+    local function PriorityOn() return audio().PrioritizeCurrentDialogue end
+    layout:Indent()
+    local npc = layout:Checkbox(L.OPT_INTERRUPT_NPC, L.OPT_INTERRUPT_NPC_TIP,
+        function() return audio().InterruptForNPCs end, function(v) audio().InterruptForNPCs = v end)
+    local places = layout:Checkbox(L.OPT_INTERRUPT_PLACES, L.OPT_INTERRUPT_PLACES_TIP,
+        function() return audio().InterruptForPlaces end, function(v) audio().InterruptForPlaces = v end)
+    layout:Outdent()
+    Requires(npc, PriorityOn, L.OPT_PRIORITIZE_CURRENT_DIALOGUE)
+    Requires(places, PriorityOn, L.OPT_PRIORITIZE_CURRENT_DIALOGUE)
     layout:Slider(L.OPT_VOICE_SPEED, 1, 1.5, 0.1,
         function() return audio().VoiceSpeed or 1 end, function(v) audio().VoiceSpeed = v end,
         nil, function(v) return format("%.1f×", v) end, L.OPT_VOICE_SPEED_TIP)

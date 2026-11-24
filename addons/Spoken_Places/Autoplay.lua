@@ -228,7 +228,7 @@ local function Enqueue(mapID, areaKey)
 	-- Marks this as something the player did not ask for, which is what the hold
 	-- above keys on and what keeps a background failure from printing.
 	item.autoplay = true
-	item.playbackContext = item.key
+	item.playbackContext = "place:" .. item.key
 
 	-- The queue refuses a duplicate of its own accord: the login greeting and a
 	-- real discovery message can name the same area, and an area on a zone border

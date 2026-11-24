@@ -61,7 +61,7 @@ pack calls into it.
    the read waits until the window is fully shown.
 
 With Spoken's Prioritize Current Dialogue on, automatic greetings can enter the queue while a quest
-line is playing. A new NPC's greeting goes ahead of waiting lines.
+line is playing. When NPC Dialogue Can Interrupt is on, a new NPC's greeting goes ahead of waiting lines.
 
 When the player picks an option, the next page is read whatever Read Greetings says: the
 once-per settings hold back only the greeting an NPC opens with. The page is labelled with the

@@ -57,7 +57,8 @@ Expect("the same NPC's next line joins the backlog", Q:GetQueue()[4], sameNPC)
 stub.Advance(1.55)
 Expect("the interrupted clip restarts after the new NPC", world.played[3], oldNPC.path)
 
-local currentPlace = H.Clip({ playbackContext = "z:123" })
+env.Addon.db.profile.Audio.InterruptForPlaces = true
+local currentPlace = H.Clip({ playbackContext = "place:z:123" })
 local holdPlace = true
 places:AddGate(function() return holdPlace and "in combat" end)
 places:Enqueue(currentPlace)
@@ -72,16 +73,45 @@ quests:Enqueue(thirdNPC)
 Expect("a new context leaves the player's pause in effect", Q:IsPaused(), true)
 Expect("a new context leaves the paused clip at the head", Q:GetCurrentSound(), currentPlace)
 
+Fresh()
+env.Addon.db.profile.Audio.PrioritizeCurrentDialogue = true
+env.Addon.db.profile.Audio.InterruptForPlaces = false
+local firstArea = H.Clip({ playbackContext = "place:z:123" })
+local nextArea = H.Clip({ playbackContext = "place:s:123:inn" })
+local visitor = H.Clip({ priority = "low", playbackContext = "npc:visitor" })
+places:Enqueue(firstArea)
+places:Enqueue(nextArea)
+Expect("by default area narration queues behind the area already speaking", Q:GetCurrentSound(), firstArea)
+quests:Enqueue(visitor)
+Expect("NPC dialogue interrupts area narration", Q:GetCurrentSound(), visitor)
+Expect("the interrupted area goes first after the NPC", Q:GetQueue()[2], firstArea)
+Expect("the next area stays queued after it", Q:GetQueue()[3], nextArea)
+env.Addon.db.profile.Audio.InterruptForNPCs = false
+local otherNPC = H.Clip({ priority = "low", playbackContext = "npc:other" })
+quests:Enqueue(otherNPC)
+Expect("turning off NPC interruption still admits their gossip", Q:GetQueue()[4], otherNPC)
+Expect("turning off NPC interruption leaves the player speaking", Q:GetCurrentSound(), visitor)
+
 ---------------------------------------------------------------- voice speed and fallback
 Fresh()
+env.Addon:Enable()
 env.Addon.db.profile.Audio.VoiceSpeed = 1.5
 local sourcePath = [[Interface\AddOns\SpokenQuestsAudioShared\generated\sounds\quests\clip.ogg]]
 local fastPath = [[Interface\AddOns\Spoken\VoiceSpeed\150\SpokenQuestsAudioShared\generated\sounds\quests\clip.ogg.mp3]]
-local fast = H.Clip({ path = sourcePath, length = 3 })
+local fast = H.Clip({ path = sourcePath, length = 3,
+    present = { transcript = "One two three", timings = { 0, 1.2, 2.4 } } })
 quests:Enqueue(fast)
 Expect("speed selects the locally rendered audio file", world.played[1], fastPath)
 stub.Advance(1)
-Expect("captions advance in original recording seconds", Q:VoiceElapsed(fast), 1.5)
+Expect("queue time advances in original recording seconds", Q:VoiceElapsed(fast), 1.5)
+Expect("captions use the same faster clock as the voice", env.Transcript:GetElapsed(), 1.5)
+Expect("the active caption word matches the accelerated voice", env.Spoken:GetCaption().activeWord, 2)
+Q:PauseQueue()
+stub.Advance(.5)
+Expect("pausing freezes the accelerated caption position", env.Transcript:GetElapsed(), 1.5)
+Q:ResumeQueue()
+Expect("replay restarts the caption clock", env.Transcript:GetElapsed(), 0)
+stub.Advance(1)
 stub.Advance(1)
 Expect("the three-second line finishes in two seconds", Q:IsEmpty(), true)
 
@@ -92,6 +122,7 @@ Expect("unavailable speed variants use the original file", world.played[#world.p
 Expect("fallback has original timing", fallback.playbackSpeed, 1)
 stub.Advance(2)
 Expect("the fallback line still plays after two seconds", Q:IsPlaying(fallback), true)
+Expect("fallback captions follow the original speed", env.Transcript:GetElapsed(), 2)
 
 ---------------------------------------------------------------- dedup on key
 Fresh()
@@ -650,26 +681,24 @@ stub.Advance(1)
 Expect("...it plays once released, with no cue", Cues() == 0 and #world.played == 2, true)
 
 ---------------------------------------------------------------- the client cuts the voice
--- With Sound in Background off, the client stops every sound when the game loses focus and
--- never starts it again. Measured in-game: C_Sound.IsPlaying turns false at the alt-tab and stays so.
+-- A recording can end early or lose playback in the client. Either way it must not
+-- leave Spoken manually stopped even when no priority rule is active.
 local cut = {}
 _G.C_Sound = { IsPlaying = function(handle) return not cut[handle] end }
 
 Fresh()
+env.Addon.db.profile.Audio.PrioritizeCurrentDialogue = false
+env.Addon.db.profile.Audio.CueBetweenLines = false
 local long, after = H.Clip({ length = 10 }), H.Clip()
 quests:Enqueue(long); quests:Enqueue(after)
 stub.Advance(2)
 cut[long.handle] = true
-stub.Advance(2)
-Expect("a voice the client cut stops the line", Q:IsPaused(), true)
-Expect("...keeping it at the head", Q:GetCurrentSound(), long)
-Expect("...and not speaking, so the bar stops", Q:IsPlaying(), false)
-stub.Advance(10)
-Expect("...the next line waits", #world.played, 1)
-Q:ResumeQueue()
-Expect("Replay plays it from the start", world.played[2], long.path)
-stub.Advance(4)
-Expect("...and the replay is not taken for a cut", Q:IsPaused(), false)
+stub.Advance(.5)
+Expect("a voice ending early does not pause the queue with priority off", Q:IsPaused(), false)
+Expect("the early line is complete during the configured gap", Q:VoiceElapsed(long), long.length)
+stub.Advance(.6)
+Expect("the next line plays after the normal gap", world.played[2], after.path)
+Expect("the early line remains available through Previous", Q:GetPrevious(), long)
 
 Fresh()
 cut = {}

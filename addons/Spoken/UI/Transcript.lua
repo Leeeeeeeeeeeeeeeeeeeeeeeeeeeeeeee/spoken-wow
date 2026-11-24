@@ -137,8 +137,8 @@ function Transcript:TextFor(clip)
 end
 
 function Transcript:AudioElapsed()
-    if self.startedAt and self.clip and SoundQueue:IsPlaying(self.clip) then
-        return GetTime() - self.startedAt
+    if self.trackingPlayback and self.clip and SoundQueue:IsPlaying(self.clip) then
+        return SoundQueue:VoiceElapsed(self.clip)
     end
     return self.elapsed or 0
 end
@@ -252,12 +252,9 @@ end
 function Transcript:Release()
     if not self.held then return end
     self.held = nil
-    local start = self.heldStart
+    local clip = self.heldStart
     self.heldStart = nil
-    if start then
-        self:Started(start.clip)
-        self.startedAt = start.at
-    end
+    if clip then self:Started(clip) end
     self:Sync()
 end
 
@@ -271,8 +268,8 @@ end
 
 function Transcript:Started(clip)
     if not self.held and HeldFor(self, clip) then self.held = true end
-    if self.held then self.heldStart = { clip = clip, at = GetTime() }; return end
-    self.elapsed, self.startedAt = 0, GetTime()
+    if self.held then self.heldStart = clip; return end
+    self.elapsed, self.trackingPlayback = 0, true
     self:SetClip(clip)
     self.hasStarted = true
     -- CLIP_STARTED precedes installation of the queue's timer. AUDIO_CHANGED
@@ -286,17 +283,17 @@ function Transcript:Sync()
     local current = PlayerFrame and PlayerFrame:Head() or SoundQueue:GetCurrentSound()
     -- A window turning to it by fading out first: these words stay until it has.
     if HeldFor(self, current) then
-        self.held, self.heldStart = true, { clip = current, at = GetTime() }
+        self.held, self.heldStart = true, current
         return
     end
     if current ~= self.clip then
-        self.elapsed, self.startedAt = 0, nil
+        self.elapsed, self.trackingPlayback = 0, nil
         self:SetClip(current)
-    elseif self.startedAt and not SoundQueue:IsPlaying(current) then
+    elseif self.trackingPlayback and not SoundQueue:IsPlaying(current) then
         -- Pausing stops the sound. Keep its position. Resume starts the file over and fires
         -- CLIP_STARTED again.
-        self.elapsed = GetTime() - self.startedAt
-        self.startedAt = nil
+        self.elapsed = SoundQueue:VoiceElapsed(current)
+        self.trackingPlayback = nil
     end
     self:Update()
 end
